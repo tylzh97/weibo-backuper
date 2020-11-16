@@ -1,0 +1,46 @@
+# This is a basic workflow to help you get started with Actions
+
+name: Backup
+
+# Controls when the action will run. Triggers the workflow on push or pull request
+# events but only for the master branch
+on:
+  push:
+    branches: 
+      - test
+  schedule:
+    - cron: '20 * * * *'
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "build"
+  report:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+    - uses: actions/checkout@v2
+      
+    - name: Set up Python 3.6
+      uses: actions/setup-python@v1
+      with:
+        python-version: 3.6
+
+    # Runs a set of commands using the runners shell
+    - name: Run a multi-line script
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install -r requirements.txt
+        cp config.copy.py config.py
+        sed -i "s/[COOKIE]/${{ secrets.COOKIE }}/g" config.py
+        sed -i "s/[HISTORY_IDS]/${{ secrets.HISTORY_IDS }}/g" config.py
+        sed -i "s/[SC_KEY]/${{ secrets.SC_KEY }}/g" config.py
+        sed -i "s/[A_K]/${{ secrets.A_K }}/g" config.py
+        sed -i "s/[A_S]/${{ secrets.A_S }}/g" config.py
+        sed -i "s/[REGION]/${{ secrets.REGION }}/g" config.py
+        sed -i "s/[BUCKET]/${{ secrets.BUCKET }}/g" config.py
+        sed -i "s/[TOKEN]/${{ secrets.TOKEN }}/g" config.py
+        python config.py
+        #python ./sub.py >> /dev/null

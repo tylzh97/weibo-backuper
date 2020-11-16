@@ -1,0 +1,5 @@
+.vscode
+.DS_Store
+__pycache__
+# 排除config文件, 每次使用Config时都需要拷贝config.copy.py
+config.py
