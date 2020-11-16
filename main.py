@@ -217,20 +217,10 @@ class Weibo(object):
             print(counter, ' / ', length)
             print(img)
             key = 'image/' + img.split('/')[-1]
-            content = None
-            try:
-                img_resp = requests.get(img, timeout=40)
-                if img_resp.status_code == 200:
-                    content = img_resp.content
-                    print(key, '下载完成! ', content[:30])
-                else:
-                    continue
-            except:
-                continue
             if not self.bucket.object_exists(key):
                 self.bucket.put_object(
                     key, 
-                    content
+                    requests.get(img, stream=True)
                     )
         return True
 
