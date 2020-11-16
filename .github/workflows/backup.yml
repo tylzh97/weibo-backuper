@@ -7,7 +7,7 @@ name: Backup
 on:
   push:
     branches: 
-      - test
+      - master
   schedule:
     - cron: '20 * * * *'
 
