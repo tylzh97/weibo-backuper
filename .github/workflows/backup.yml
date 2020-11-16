@@ -45,4 +45,5 @@ jobs:
         sed -i "s|\[REGION\]|${{ secrets.REGION }}|g" config.py
         sed -i "s|\[BUCKET\]|${{ secrets.BUCKET }}|g" config.py
         sed -i "s|\[TOKEN\]|${{ secrets.TOKEN }}|g" config.py
-        python config.py
+        cat config.py
+        python main.py
