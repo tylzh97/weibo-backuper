@@ -3,6 +3,7 @@ import oss2
 import json
 import time
 import requests
+from requests.exceptions import Timeout
 from config import conf
 from github import Github
 from datetime import datetime
@@ -216,10 +217,20 @@ class Weibo(object):
             print(counter, ' / ', length)
             print(img)
             key = 'image/' + img.split('/')[-1]
-            if True or not self.bucket.object_exists(key):
+            content = None
+            try:
+                img_resp = requests.get(img, timeout=40)
+                if img_resp.status_code == 200:
+                    content = img_resp.content
+                    print(key, '下载完成! ', content[:30])
+                else:
+                    continue
+            except:
+                continue
+            if not self.bucket.object_exists(key):
                 self.bucket.put_object(
                     key, 
-                    requests.get(img, headers=self.header, stream=True)
+                    content
                     )
         return True
 
