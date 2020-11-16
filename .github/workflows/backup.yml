@@ -34,9 +34,6 @@ jobs:
         python -m pip install --upgrade pip
         python -m pip install -r requirements.txt
         cp config.copy.py config.py
-
-        sed -i "s|\[A_K\]|123|g" config.py
-
         sed -i "s|\[COOKIE\]|${{ secrets.COOKIE }}|g" config.py
         sed -i "s|\[HISTORY_IDS\]|${{ secrets.HISTORY_IDS }}|g" config.py
         sed -i "s|\[SC_KEY\]|${{ secrets.SC_KEY }}|g" config.py
