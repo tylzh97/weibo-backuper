@@ -2,11 +2,26 @@ import os
 import oss2
 import json
 import time
+import logging
 import requests
-from requests.exceptions import Timeout
 from config import conf
 from github import Github
 from datetime import datetime
+from requests.exceptions import Timeout
+
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+handler = logging.FileHandler("log.txt")
+handler.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+
+# logger.info("Start print log")
+# logger.debug("Do something")
+# logger.warning("Something maybe fail.")
+
 
 class Weibo(object):
     def __init__(self):
@@ -46,16 +61,20 @@ class Weibo(object):
                 )
                 break
             except Exception as e:
-                print(e)
+                # print(e)
+                logger.warning('同步ID列表异常, 异常信息: ' + str(e))
         ret = {}
         if resp and resp.status_code:
             if resp.status_code != 200:
-                print('资源同步成功, 但是服务器返回了异常状态')
+                # print('资源同步成功, 但是服务器返回了异常状态')
+                logger.warning('同步ID列表时, 服务器响应了异常状态, 状态码: ' + str(resp.status_code))
             else:
-                print('资源下载成功')
+                # print('资源下载成功')
+                logger.info('历史Tweet ID列表同步成功')
                 ret = json.loads(resp.content.decode('UTF-8'))
         else:
-            print('资源下载尝试超出最大尝试次数.')
+            # print('资源下载尝试超出最大尝试次数.')
+            logger.warning('同步ID列表时, 超过最大重试次数, 备份结束')
         return ret
 
     # init oss
@@ -77,14 +96,16 @@ class Weibo(object):
                     timeout=timeout
                 )
                 if resp.status_code != 200:
-                    print('服务器状态异常')
+                    # print('服务器状态异常')
+                    logger.error('请求新的微博列表时, 服务器响应了异常状态: ' + str(resp.status_code))
                 else:
                     # 解析服务器的响应数据
                     content = json.loads(resp.content.decode('UTF-8'))
                     if 'cards' not in content.keys():
                         # 如果服务器响应了异常的内容
-                        print(content.get('errmsg'))
-                        print('服务器恢复了错误响应, 可能是由于Cookie到期')
+                        # print(content.get('errmsg'))
+                        # print('服务器恢复了错误响应, 可能是由于Cookie到期')
+                        logger.warning('请求新的微博列表时, 服务器响应的内容格式错误.')
                         return []
                     else:
                         # 期望的请求内容
@@ -96,13 +117,16 @@ class Weibo(object):
                             if i not in history_str:
                                 new_cards.append(card)
                             else:
-                                print('已经找到上次的备份头,数据卡片同步完成')
+                                # print('已经找到上次的备份头,数据卡片同步完成')
+                                logger.info('找到上次备份头, 卡片列表同步完成.')
                                 self.new_cards = new_cards
                                 return new_cards
                     page += 1
-                    print('还没找到上次的备份头')
+                    # print('还没找到上次的备份头')
+                    logger.info('还没有找到上次的备份头, 翻到下一页.')
             except Exception as e:
-                print(e)
+                # print(e)
+                logger.info('请求新的微博列表时出现未知异常, 异常内容: ' + str(e))
                 pass
         return []
 
@@ -121,7 +145,6 @@ class Weibo(object):
         if resp and resp.status_code == 200:
             return resp.content.decode('UTF-8')
         return None
-
 
     # 更新cards详情
     def update_cards(self, cards):
@@ -190,17 +213,20 @@ class Weibo(object):
             )
             # 文件的raw链接
             url = resp.get('content').download_url
-            print('ID列表同步成功:\t', url)
+            # print('ID列表同步成功:\t', url)
+            logging.info('向ID列表托管的Github仓库中, 更新ID列表成功')
             return url
         except Exception as e:
-            print('向github中同步id列表时出现异常,错误内容如下:')
-            print(e)
+            # print('向github中同步id列表时出现异常,错误内容如下:')
+            # print(e)
+            logging.info('向github中同步id列表时出现异常,错误内容如下: ' + str(e))
         return ''
 
     # 备份图片到OSS
     def sync_image(self):
         images = []
-        print('-----'*10)
+        # print('-----'*10)
+        logging.info('开始在OSS中备份图片:')
         for card in self.new_cards:
             mblog = card.get('mblog')
             if mblog.get('retweeted_status'):
@@ -214,8 +240,10 @@ class Weibo(object):
         length = len(images)
         for img in images:
             counter += 1
-            print(counter, ' / ', length)
-            print(img)
+            # print(counter, ' / ', length)
+            logging.info('{} / {}'.format(counter, length))
+            # print(img)
+            logging.info(img)
             key = 'image/' + img.split('/')[-1]
             if not self.bucket.object_exists(key):
                 self.bucket.put_object(
@@ -238,15 +266,24 @@ class Weibo(object):
 
     # 开始工作
     def start(self):
+        if not self.check_cookie():
+            self.weixin_alert({
+                "title": "微博Cookie已经过期",
+                "context": "Cookie已经过期了, 请在服务器中更新Cookie",
+            })
+            logger.error('Cookie 过期, 脚本终止. 请更新config.py中的Cookie后再启动项目')
+            exit(1)
         if not self.history_ids:
-            print('获取ID异常, 备份结束')
+            # print('获取ID异常, 备份结束')
+            logger.info('获取ID异常, 备份结束')
             return False
         # 开始备份, 获取所有的new_cards
         new_cards = self.start_backup()
         new_cards = self.update_cards(new_cards)
         self.new_cards = new_cards
         if not new_cards:
-            print('没有发布新微博, 或者卡片列表异常. 备份结束')
+            # print('没有发布新微博, 或者卡片列表异常. 备份结束')
+            logger.info('没有获取到新的微博, 或者获取卡片时异常, 本次备份结束.')
             return False
         # 同步照片列表
         self.sync_image()
@@ -254,7 +291,8 @@ class Weibo(object):
         self.update_history(new_cards)
         # 更新ID记录
         new_id_list = [_.get('mblog').get('id') for _ in new_cards]
-        print(new_id_list)
+        # print(new_id_list)
+        logger.info('新的ID列表:' + str(new_id_list))
         id_list = new_id_list + self.history_ids
         self.sync_bid_list(json.dumps(id_list, ensure_ascii=False))
         self.weixin_alert({
@@ -263,18 +301,31 @@ class Weibo(object):
         })
         return True
 
+    # 检测Cookie是否过期
+    def check_cookie(self):
+        resp = self.requests("https://m.weibo.cn/api/config")
+        if resp:
+            data = json.loads(resp)
+            if data.get('data'):
+                if data.get('data').get('login'):
+                    return True
+        return False
+
+
 if __name__ == '__main__':
-    # print(conf)
-    w = Weibo()
-    w.start()
-    # data = w.init_history()
-    # print('*'*100)
-    # new_cards = w.start_backup()
-    # print(len(new_cards))
-    # print(data)
-    # w.sync_image()
-    # print('Hello World!')
-    # 11111111111111
-    # 22222222222222
-    # 3333
-    # 4444
+    # print('\n\n', str(datetime.now()))
+    logger.debug('Debug Test')
+    logger.warning('Warning Test')
+    logger.error('Error Test')
+    logger.info('*'*10 + '    ' + datetime.now().strftime('%Y-%m-%d %H:%M:%S %f') + '    ' + '*'*10)
+    while True:
+        logger.info(' '*10)
+        logger.info('-'*30)
+        logger.info(' '*10)
+        logger.info('开启新一轮更新')
+        w = Weibo()
+        w.start()
+        delay = 600
+        logger.info('本轮内容同步完成, 将在 {} 秒后开始下一次同步'.format(delay))
+        logger.info('   \n   \n   \n   ')
+        time.sleep(delay)
